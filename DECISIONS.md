@@ -110,3 +110,37 @@ Running log of non-obvious choices made while building RoboSense, per the
   TLD), which would have made the printed demo login unusable. Switched to
   `demo@robosense.dev` and added a regression test asserting the seed credentials
   validate.
+
+## M4 — ESP32 firmware
+
+- **Runs on a bare ESP32 with zero extra hardware.** The default build reports
+  the chip's internal temperature plus WiFi RSSI, free heap, uptime, and a demo
+  battery curve — all readable on any ESP32 dev board. A guarded `USE_DHT22`
+  path adds real ambient temperature/humidity. This maximizes the chance a
+  reviewer can flash it and see data without sourcing parts.
+
+- **Offline buffering with original timestamps is the centerpiece.** Readings
+  taken while disconnected are queued in a fixed-size RAM ring buffer
+  (drop-oldest) and resent oldest-first on reconnect, each carrying its own
+  capture time. This is the concrete reason the ingest API accepts an optional
+  `timestamp` — the two milestones were designed together so a network gap
+  renders as a gap-free series, not a cluster at reconnect.
+
+- **Hand-built JSON, no JSON library on the core path.** The payload is flat, so
+  `snprintf`/`String` assembly avoids an ArduinoJson dependency and the heap
+  churn that comes with it. ArduinoJson would be over-engineering here.
+
+- **Non-blocking loop throughout.** WiFi reconnect uses exponential backoff
+  (1 s → 30 s) and the loop never spins on `while (WiFi.status()...)`; sampling
+  continues during outages. This is the behaviour the brief specifically calls
+  out as a strong signal.
+
+- **Single `.ino` that also builds under PlatformIO.** `platformio.ini` sets
+  `src_dir = .` so the Arduino-IDE-friendly single file in `firmware/esp32/`
+  compiles without a `src/` move. Config `#define`s are `#ifndef`-guarded so
+  secrets can be injected via `build_flags` instead of edited into the source.
+
+- **Verified two ways without a board.** The firmware was compiled for the real
+  `esp32dev` target with PlatformIO (`[SUCCESS]`, flash 70.5%, RAM 15.6%), and
+  the exact JSON it emits was POSTed to the running backend — 201, one row per
+  numeric sensor, original `timestamp` preserved.

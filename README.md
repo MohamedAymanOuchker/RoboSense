@@ -6,11 +6,11 @@ RoboSense is an open-source telemetry layer for robots and embedded devices. A
 device POSTs sensor readings over HTTP; RoboSense stores them as time-series data
 in TimescaleDB and shows them on a clean live dashboard.
 
-> **Status:** under active construction. Milestones 1–3 are complete: foundation,
-> auth + device management, and the telemetry engine (TimescaleDB hypertable,
-> API-key ingestion with rate limiting, and a `time_bucket` query API). The
-> dashboard and the ESP32 / ROS2 examples are landing next — see the
-> [Roadmap](#roadmap).
+> **Status:** under active construction. Milestones 1–4 are complete: foundation,
+> auth + device management, the telemetry engine (TimescaleDB hypertable, API-key
+> ingestion with rate limiting, and a `time_bucket` query API), and the **ESP32
+> firmware** (real, flashable, with offline buffering + reconnect). The dashboard
+> and ROS2 example are landing next — see the [Roadmap](#roadmap).
 
 <!-- A dashboard screenshot will live here once Milestone 5 ships. -->
 
@@ -120,6 +120,23 @@ per device.
 `bucket` (`1s`,`10s`,`1m`,`5m`,`15m`,`1h`,`1d`) with `agg` (`avg`/`min`/`max`) to
 downsample with TimescaleDB `time_bucket`.
 
+## Hardware: ESP32 firmware
+
+A real, flashable ESP32 example lives in
+[`firmware/esp32/`](firmware/esp32/README.md). It runs on a bare ESP32 dev board
+with no extra wiring (reporting internal temperature, WiFi signal, free heap, and
+uptime), or with a DHT22 for ambient temperature/humidity. It is built for the
+flaky networks robots actually use:
+
+- non-blocking WiFi reconnect with exponential backoff,
+- an NTP-synced clock so readings carry an accurate capture time, and
+- **offline buffering** — readings taken while disconnected are queued and resent
+  with their original timestamps once the link returns, so a network gap becomes
+  a gap-free series in the dashboard rather than a pile-up at reconnect.
+
+It compiles cleanly via PlatformIO (`pio run`) or the Arduino IDE — see the
+[firmware README](firmware/esp32/README.md) for wiring and flashing.
+
 ## Tech stack
 
 - **Backend:** Python 3.13, FastAPI, Uvicorn, Pydantic v2, SQLAlchemy 2 (async), asyncpg
@@ -142,7 +159,7 @@ cd backend && pip install -e ".[dev]" && pytest -q
 - [x] **M1** — Foundation: Docker Compose, TimescaleDB, FastAPI healthchecks, CI
 - [x] **M2** — Auth (JWT) + device management with per-device API keys
 - [x] **M3** — Telemetry ingest + time-bucketed query API + seed script
-- [ ] **M4** — ESP32 firmware example (WiFi, POST loop, reconnect handling)
+- [x] **M4** — ESP32 firmware example (WiFi, POST loop, reconnect handling)
 - [ ] **M5** — Next.js dashboard: live + historical charts, threshold alerts
 - [ ] **M6** — ROS2 bridge example + OpenAPI / docs polish
 - [ ] **M7** _(stretch)_ — anomaly flag (rolling z-score)
