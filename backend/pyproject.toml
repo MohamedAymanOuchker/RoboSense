@@ -1,0 +1,44 @@
+[project]
+name = "robosense-backend"
+version = "0.1.0"
+description = "Self-hostable telemetry backend for robots and embedded devices."
+requires-python = ">=3.11"
+license = { text = "MIT" }
+dependencies = [
+    "fastapi==0.137.2",
+    "uvicorn[standard]==0.49.0",
+    "sqlalchemy==2.0.51",
+    "asyncpg==0.31.0",
+    "pydantic==2.13.4",
+    "pydantic-settings==2.14.1",
+]
+
+[project.optional-dependencies]
+dev = [
+    # pytest is pinned to 8.x because pytest-asyncio 1.1.0 (the latest) caps at <9.
+    "pytest==8.3.4",
+    "pytest-asyncio==1.1.0",
+    "httpx==0.28.1",
+    "ruff==0.15.17",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["app"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+addopts = "-ra"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+ignore = ["B008"]  # FastAPI uses function calls (Depends/Query) in argument defaults.

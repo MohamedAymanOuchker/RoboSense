@@ -1,0 +1,53 @@
+# RoboSense local stack.
+# `make up` (or `docker compose up -d --build`) brings up the database and backend.
+# The Next.js frontend is added in Milestone 5.
+
+services:
+  db:
+    image: timescale/timescaledb:2.28.0-pg17
+    container_name: robosense-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-robosense}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-robosense}
+      POSTGRES_DB: ${POSTGRES_DB:-robosense}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-robosense} -d ${POSTGRES_DB:-robosense}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: robosense-backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://robosense:robosense@db:5432/robosense}
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-production-please}
+      JWT_ALGORITHM: ${JWT_ALGORITHM:-HS256}
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-1440}
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+    ports:
+      - "8000:8000"
+    volumes:
+      # Mounting the source enables hot-reload during local development.
+      - ./backend/app:/app/app
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0) if urllib.request.urlopen('http://localhost:8000/api/health').status==200 else sys.exit(1)\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+volumes:
+  pgdata:
