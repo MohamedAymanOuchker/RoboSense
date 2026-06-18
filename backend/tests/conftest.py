@@ -22,6 +22,7 @@ from sqlalchemy.pool import NullPool
 import app.models  # noqa: F401  (register models on Base.metadata)
 from app.core.config import settings
 from app.db.base import Base
+from app.db.init_db import prepare_database
 from app.db.session import get_session
 from app.main import app
 
@@ -60,7 +61,8 @@ async def _prepare_database() -> AsyncGenerator[None, None]:
     await _ensure_test_database()
     async with test_engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
-        await conn.run_sync(Base.metadata.create_all)
+        # Reuse the app's real schema-prep path (extension + tables + hypertable).
+        await prepare_database(conn)
     yield
     async with test_engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)

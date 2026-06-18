@@ -6,9 +6,10 @@ RoboSense is an open-source telemetry layer for robots and embedded devices. A
 device POSTs sensor readings over HTTP; RoboSense stores them as time-series data
 in TimescaleDB and shows them on a clean live dashboard.
 
-> **Status:** under active construction. Milestones 1–2 are complete (foundation,
-> plus auth + device management with per-device API keys). Ingestion, dashboard,
-> and the ESP32 / ROS2 examples are landing milestone by milestone — see the
+> **Status:** under active construction. Milestones 1–3 are complete: foundation,
+> auth + device management, and the telemetry engine (TimescaleDB hypertable,
+> API-key ingestion with rate limiting, and a `time_bucket` query API). The
+> dashboard and the ESP32 / ROS2 examples are landing next — see the
 > [Roadmap](#roadmap).
 
 <!-- A dashboard screenshot will live here once Milestone 5 ships. -->
@@ -49,6 +50,21 @@ Then open:
 `make up` copies `.env.example` to `.env` on first run, builds the images, and
 starts the database and backend. Stop everything with `make down`.
 
+**See data immediately** — seed a demo device with 24h of fake telemetry:
+
+```bash
+make seed
+```
+
+It prints demo dashboard credentials and a device API key. Try an ingest:
+
+```bash
+curl -X POST http://localhost:8000/api/telemetry \
+  -H "X-API-Key: <printed-key>" \
+  -H "Content-Type: application/json" \
+  -d '{"device_id":"robot001","temperature":24.5,"battery":87,"speed":0.72}'
+```
+
 ## Local development
 
 `make` targets wrap Docker Compose:
@@ -87,10 +103,22 @@ available today:
 | `GET`  | `/api/devices` | JWT | List your devices |
 | `GET`/`PATCH`/`DELETE` | `/api/devices/{id}` | JWT | Get / rename / delete a device |
 | `POST` | `/api/devices/{id}/regenerate-key` | JWT | Rotate a device's API key |
+| `POST` | `/api/telemetry` | API key | Ingest a reading (flat `sensor: value` JSON) |
+| `GET`  | `/api/telemetry` | JWT | Query telemetry, optionally downsampled |
 
 Passwords are hashed with Argon2; device API keys are random tokens stored only
-as a SHA-256 hash and shown exactly once. Telemetry ingestion (`X-API-Key`) and
-querying land in Milestone 3.
+as a SHA-256 hash and shown exactly once.
+
+**Ingestion** (`POST /api/telemetry`, `X-API-Key` header) accepts a flat payload —
+every numeric key becomes a `sensor_name: value` row, identified by the device's
+API key. An optional `timestamp` lets a device flush readings buffered during a
+network drop; otherwise the server stamps receive time. Ingestion is rate-limited
+per device.
+
+**Querying** (`GET /api/telemetry`, JWT) takes `device_id` (required),
+`sensor_name`, `start`/`end`, `order` (`asc`/`desc`), and `limit`/`offset`. Pass
+`bucket` (`1s`,`10s`,`1m`,`5m`,`15m`,`1h`,`1d`) with `agg` (`avg`/`min`/`max`) to
+downsample with TimescaleDB `time_bucket`.
 
 ## Tech stack
 
@@ -113,7 +141,7 @@ cd backend && pip install -e ".[dev]" && pytest -q
 
 - [x] **M1** — Foundation: Docker Compose, TimescaleDB, FastAPI healthchecks, CI
 - [x] **M2** — Auth (JWT) + device management with per-device API keys
-- [ ] **M3** — Telemetry ingest + time-bucketed query API + seed script
+- [x] **M3** — Telemetry ingest + time-bucketed query API + seed script
 - [ ] **M4** — ESP32 firmware example (WiFi, POST loop, reconnect handling)
 - [ ] **M5** — Next.js dashboard: live + historical charts, threshold alerts
 - [ ] **M6** — ROS2 bridge example + OpenAPI / docs polish

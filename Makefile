@@ -28,7 +28,7 @@ logs: ## Follow logs from all services
 ps: ## Show running services
 	$(COMPOSE) ps
 
-seed: ## Populate the database with fake telemetry (added in Milestone 3)
+seed: ## Populate the database with a demo device + 24h of fake telemetry
 	$(COMPOSE) exec backend python -m app.seed
 
 test: ## Run the backend test suite inside the backend container

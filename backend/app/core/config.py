@@ -24,6 +24,10 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 60 * 24
 
+    # --- Ingestion rate limit (per device, fixed window) ---
+    rate_limit_max_requests: int = 240
+    rate_limit_window_seconds: float = 60.0
+
 
 @lru_cache
 def get_settings() -> Settings:

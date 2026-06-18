@@ -7,6 +7,7 @@ from fastapi import FastAPI
 from app.api.auth import router as auth_router
 from app.api.devices import router as devices_router
 from app.api.health import router as health_router
+from app.api.telemetry import router as telemetry_router
 from app.core.config import settings
 from app.db.init_db import init_models
 
@@ -32,6 +33,7 @@ app = FastAPI(
 app.include_router(health_router, prefix="/api")
 app.include_router(auth_router, prefix="/api")
 app.include_router(devices_router, prefix="/api")
+app.include_router(telemetry_router, prefix="/api")
 
 
 @app.get("/", tags=["meta"], summary="Service metadata")

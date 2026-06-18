@@ -62,3 +62,51 @@ Running log of non-obvious choices made while building RoboSense, per the
 - **JWT secret default lengthened to ≥32 bytes.** PyJWT warns on HMAC keys
   shorter than 32 bytes; the dev default is now long enough to be warning-free,
   while still clearly a "change me" placeholder.
+
+## M3 — Telemetry engine
+
+- **Composite primary key `(time, device_id, sensor_name)` + a descending
+  `(device_id, sensor_name, time)` index.** TimescaleDB requires the partitioning
+  column (`time`) in any unique constraint, so a surrogate key is impossible
+  without dragging `time` along anyway. The composite PK also dedupes a sensor's
+  reading at an instant; the extra DESC index serves the hot "recent readings for
+  a device/sensor" path. The hypertable is created with explicit SQL
+  (`create_hypertable`) in the shared `prepare_database`, reused by app startup
+  and the tests so they can't drift.
+
+- **The device is identified by its API key, not the payload.** The flexible
+  ingest body may carry a `device_id` label (matching the brief's example) but it
+  is ignored — the authenticated `X-API-Key` determines the device. Every other
+  top-level key is a `sensor_name: value` pair.
+
+- **Optional client `timestamp`, server time by default.** The brief's payload
+  has no timestamp, but accepting an optional one lets a device flush readings it
+  buffered during a network drop with their *original* times — directly relevant
+  to the ESP32 reconnect story in M4. Absent it, the server stamps receive time.
+
+- **Strict numeric validation; booleans rejected.** Non-numeric sensor values
+  return 422 naming the offending keys. `bool` is rejected explicitly (it's an
+  `int` subclass) so flags aren't silently stored as 0/1 doubles.
+
+- **Idempotent inserts via `ON CONFLICT DO NOTHING`** on the composite PK, so a
+  device retrying after an uncertain network result can't create duplicates.
+
+- **Downsampling via a closed allowlist of bucket sizes and aggregates.** Bucket
+  intervals (`1s…1d`) map to `timedelta` objects bound as parameters to
+  `time_bucket`, and aggregates are limited to avg/min/max. Nothing from the
+  query string is ever interpolated into SQL.
+
+- **`order=asc|desc` query param.** Charts want chronological order (default
+  `asc`); the dashboard's "current value"/alert checks want latest-first
+  (`desc` + `limit`). Added now so M5 isn't blocked.
+
+- **In-process fixed-window rate limiter, per device.** A single FastAPI process
+  owns ingestion (per the non-goals: no queues, no distributed infra), so an
+  in-memory limiter is correct. It's exposed as a dependency so tests override it
+  deterministically. Default 240 requests / 60s per device, configurable.
+
+- **Seed demo email must pass `EmailStr`.** A live smoke test caught that
+  `demo@robosense.local` is rejected by `email-validator` (`.local` is a reserved
+  TLD), which would have made the printed demo login unusable. Switched to
+  `demo@robosense.dev` and added a regression test asserting the seed credentials
+  validate.
