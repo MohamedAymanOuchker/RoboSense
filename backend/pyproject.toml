@@ -11,6 +11,9 @@ dependencies = [
     "asyncpg==0.31.0",
     "pydantic==2.13.4",
     "pydantic-settings==2.14.1",
+    "email-validator==2.3.0",
+    "argon2-cffi==25.1.0",
+    "pyjwt==2.13.0",
 ]
 
 [project.optional-dependencies]

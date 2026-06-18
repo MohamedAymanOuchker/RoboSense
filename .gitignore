@@ -25,6 +25,9 @@ dist/
 .env.local
 *.local
 
+# --- Temp / scratch ---
+*.tmp
+
 # --- Editors / OS ---
 .vscode/
 .idea/

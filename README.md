@@ -6,9 +6,9 @@ RoboSense is an open-source telemetry layer for robots and embedded devices. A
 device POSTs sensor readings over HTTP; RoboSense stores them as time-series data
 in TimescaleDB and shows them on a clean live dashboard.
 
-> **Status:** under active construction. Milestone 1 (foundation: database,
-> backend, healthchecks, CI) is complete. Auth, ingestion, dashboard, and the
-> ESP32 / ROS2 examples are landing milestone by milestone — see the
+> **Status:** under active construction. Milestones 1–2 are complete (foundation,
+> plus auth + device management with per-device API keys). Ingestion, dashboard,
+> and the ESP32 / ROS2 examples are landing milestone by milestone — see the
 > [Roadmap](#roadmap).
 
 <!-- A dashboard screenshot will live here once Milestone 5 ships. -->
@@ -73,6 +73,25 @@ docker compose exec backend pytest -q   # == make test
 docker compose down             # == make down
 ```
 
+## API
+
+Full interactive docs (with schemas and examples) are at `/docs`. Endpoints
+available today:
+
+| Method | Path | Auth | Purpose |
+| ------ | ---- | ---- | ------- |
+| `POST` | `/api/auth/register` | — | Create a dashboard user |
+| `POST` | `/api/auth/login` | — | Exchange credentials for a JWT |
+| `GET`  | `/api/auth/me` | JWT | Current user |
+| `POST` | `/api/devices` | JWT | Create a device (returns its API key **once**) |
+| `GET`  | `/api/devices` | JWT | List your devices |
+| `GET`/`PATCH`/`DELETE` | `/api/devices/{id}` | JWT | Get / rename / delete a device |
+| `POST` | `/api/devices/{id}/regenerate-key` | JWT | Rotate a device's API key |
+
+Passwords are hashed with Argon2; device API keys are random tokens stored only
+as a SHA-256 hash and shown exactly once. Telemetry ingestion (`X-API-Key`) and
+querying land in Milestone 3.
+
 ## Tech stack
 
 - **Backend:** Python 3.13, FastAPI, Uvicorn, Pydantic v2, SQLAlchemy 2 (async), asyncpg
@@ -93,7 +112,7 @@ cd backend && pip install -e ".[dev]" && pytest -q
 ## Roadmap
 
 - [x] **M1** — Foundation: Docker Compose, TimescaleDB, FastAPI healthchecks, CI
-- [ ] **M2** — Auth (JWT) + device management with per-device API keys
+- [x] **M2** — Auth (JWT) + device management with per-device API keys
 - [ ] **M3** — Telemetry ingest + time-bucketed query API + seed script
 - [ ] **M4** — ESP32 firmware example (WiFi, POST loop, reconnect handling)
 - [ ] **M5** — Next.js dashboard: live + historical charts, threshold alerts

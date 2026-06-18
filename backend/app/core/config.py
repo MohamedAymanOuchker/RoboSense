@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+asyncpg://robosense:robosense@db:5432/robosense"
 
     # --- Auth (used from Milestone 2 onward) ---
-    jwt_secret: str = "change-me-in-production-please"
+    jwt_secret: str = "dev-only-change-me-to-a-long-random-secret-min-32-bytes"
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 60 * 24
 
