@@ -6,13 +6,14 @@ RoboSense is an open-source telemetry layer for robots and embedded devices. A
 device POSTs sensor readings over HTTP; RoboSense stores them as time-series data
 in TimescaleDB and shows them on a clean live dashboard.
 
-> **Status:** under active construction. Milestones 1–4 are complete: foundation,
+> **Status:** under active construction. Milestones 1–5 are complete: foundation,
 > auth + device management, the telemetry engine (TimescaleDB hypertable, API-key
-> ingestion with rate limiting, and a `time_bucket` query API), and the **ESP32
-> firmware** (real, flashable, with offline buffering + reconnect). The dashboard
-> and ROS2 example are landing next — see the [Roadmap](#roadmap).
+> ingestion with rate limiting, and a `time_bucket` query API), the **ESP32
+> firmware** (real, flashable, with offline buffering + reconnect), and the
+> **dashboard** (live + historical charts and threshold alerts). The ROS2 example
+> is landing next — see the [Roadmap](#roadmap).
 
-<!-- A dashboard screenshot will live here once Milestone 5 ships. -->
+![RoboSense dashboard](docs/screenshots/dashboard.png)
 
 ## Architecture
 
@@ -42,10 +43,10 @@ make up
 
 Then open:
 
-- API root — http://localhost:8000
+- **Dashboard — http://localhost:3000**
 - Interactive API docs — http://localhost:8000/docs
+- API root — http://localhost:8000
 - Liveness — http://localhost:8000/api/health
-- Database readiness — http://localhost:8000/api/health/db
 
 `make up` copies `.env.example` to `.env` on first run, builds the images, and
 starts the database and backend. Stop everything with `make down`.
@@ -56,7 +57,9 @@ starts the database and backend. Stop everything with `make down`.
 make seed
 ```
 
-It prints demo dashboard credentials and a device API key. Try an ingest:
+It prints demo dashboard credentials (`demo@robosense.dev` / `demodemo123`) and a
+device API key. Log in at http://localhost:3000 to see live charts and a triggered
+battery alert. Or register a fresh account and add your own device. Try an ingest:
 
 ```bash
 curl -X POST http://localhost:8000/api/telemetry \
@@ -120,6 +123,19 @@ per device.
 `bucket` (`1s`,`10s`,`1m`,`5m`,`15m`,`1h`,`1d`) with `agg` (`avg`/`min`/`max`) to
 downsample with TimescaleDB `time_bucket`.
 
+## Dashboard
+
+A Next.js dashboard (http://localhost:3000) for the device owner:
+
+- **Device list** — cards with each device's latest readings and a live alert badge.
+- **Per-device view** — current readings, live + historical charts (Recharts) with a
+  `1h / 6h / 24h / 7d` range selector, polling every few seconds.
+- **Threshold alerts** — add per-sensor rules (e.g. `battery < 20`); a banner and
+  badge light up when the latest reading crosses the threshold. In-app only.
+- **Device management** — create devices (API key shown once), rotate keys, delete.
+
+Auth is JWT-based (register / login). See the screenshot at the top.
+
 ## Hardware: ESP32 firmware
 
 A real, flashable ESP32 example lives in
@@ -141,7 +157,7 @@ It compiles cleanly via PlatformIO (`pio run`) or the Arduino IDE — see the
 
 - **Backend:** Python 3.13, FastAPI, Uvicorn, Pydantic v2, SQLAlchemy 2 (async), asyncpg
 - **Database:** PostgreSQL + TimescaleDB (telemetry stored as a hypertable)
-- **Frontend:** Next.js (App Router) + TypeScript + Tailwind + Recharts _(M5)_
+- **Frontend:** Next.js (App Router) + TypeScript + Tailwind + Recharts
 - **Firmware:** ESP32 (Arduino / PlatformIO) _(M4)_
 - **ROS2:** `rclpy` bridge node _(M6)_
 - **Dev/CI:** Docker Compose, Makefile, pytest, ruff, GitHub Actions
@@ -160,7 +176,7 @@ cd backend && pip install -e ".[dev]" && pytest -q
 - [x] **M2** — Auth (JWT) + device management with per-device API keys
 - [x] **M3** — Telemetry ingest + time-bucketed query API + seed script
 - [x] **M4** — ESP32 firmware example (WiFi, POST loop, reconnect handling)
-- [ ] **M5** — Next.js dashboard: live + historical charts, threshold alerts
+- [x] **M5** — Next.js dashboard: live + historical charts, threshold alerts
 - [ ] **M6** — ROS2 bridge example + OpenAPI / docs polish
 - [ ] **M7** _(stretch)_ — anomaly flag (rolling z-score)
 

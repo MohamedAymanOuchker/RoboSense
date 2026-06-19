@@ -12,6 +12,7 @@ current event loop, keeping function-scoped async tests free of
 
 from collections.abc import AsyncGenerator
 
+import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text
@@ -20,7 +21,9 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
 import app.models  # noqa: F401  (register models on Base.metadata)
+from app.api.deps import get_rate_limiter
 from app.core.config import settings
+from app.core.rate_limit import FixedWindowRateLimiter
 from app.db.base import Base
 from app.db.init_db import prepare_database
 from app.db.session import get_session
@@ -68,6 +71,16 @@ async def _prepare_database() -> AsyncGenerator[None, None]:
         await conn.run_sync(Base.metadata.drop_all)
 
 
+@pytest.fixture(autouse=True)
+def _permissive_rate_limiter():
+    """Isolate every test from the shared singleton ingest limiter with a fresh,
+    generous one. Tests that exercise rate limiting override it themselves."""
+    limiter = FixedWindowRateLimiter(max_requests=10_000, window_seconds=60)
+    app.dependency_overrides[get_rate_limiter] = lambda: limiter
+    yield
+    app.dependency_overrides.pop(get_rate_limiter, None)
+
+
 @pytest_asyncio.fixture
 async def client() -> AsyncGenerator[AsyncClient, None]:
     """Async HTTP client wired to the ASGI app, using the test database."""
@@ -75,7 +88,7 @@ async def client() -> AsyncGenerator[AsyncClient, None]:
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
-    app.dependency_overrides.clear()
+    app.dependency_overrides.pop(get_session, None)
 
 
 @pytest_asyncio.fixture

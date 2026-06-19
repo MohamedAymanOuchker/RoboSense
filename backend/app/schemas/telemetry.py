@@ -46,3 +46,15 @@ class TelemetryQueryResult(BaseModel):
     agg: str | None
     count: int
     points: list[TelemetryPoint]
+
+
+class SensorSnapshot(BaseModel):
+    sensor_name: str
+    value: float
+    time: datetime
+
+
+class LatestSnapshot(BaseModel):
+    device_id: int
+    last_seen: datetime | None
+    readings: list[SensorSnapshot]

@@ -144,3 +144,39 @@ Running log of non-obvious choices made while building RoboSense, per the
   `esp32dev` target with PlatformIO (`[SUCCESS]`, flash 70.5%, RAM 15.6%), and
   the exact JSON it emits was POSTed to the running backend — 201, one row per
   numeric sensor, original `timestamp` preserved.
+
+## M5 — Dashboard
+
+- **Client-side auth (JWT in `localStorage`), client-rendered dashboard.** For a
+  small self-hosted SPA-style dashboard this is the simplest thing that works:
+  an `AuthProvider` keeps the token, the API client attaches it, and dashboard
+  routes guard on it. The tradeoff vs. httpOnly cookies + SSR is XSS exposure of
+  the token; acceptable here and called out honestly. No secrets are server-rendered.
+
+- **Alerts are evaluated server-side, not in the browser.** Rules live in an
+  `alert_rules` table and a `/alerts/status` endpoint compares each rule to the
+  sensor's latest reading. This keeps the logic authoritative and unit-testable
+  (pytest) rather than reimplemented in the UI; the dashboard just renders status.
+
+- **Added `GET /api/telemetry/latest`** (DISTINCT ON `sensor_name`) so device
+  cards and alert checks get a one-shot "current values" snapshot instead of
+  pulling full series.
+
+- **CORS middleware** allows the browser dashboard origin to call the API
+  (`CORS_ORIGINS`, default `http://localhost:3000`).
+
+- **Root `/` returns 200 via a client-side redirect** rather than a server
+  `redirect()` (307). It is friendlier to health-check probes and uptime monitors
+  that expect a 200 on `/`, and costs nothing.
+
+- **Frontend runs in dev mode under Compose**, mirroring the backend's
+  `--reload`: source is mounted with `node_modules`/`.next` kept as
+  container-owned volumes so the host (Windows) install can't shadow them.
+  `NEXT_PUBLIC_API_URL` points the browser at the backend.
+
+- **Pinned to current frontend versions (June 2026):** Next 16.2.9, React 19.2.7,
+  Tailwind 4.3.1 (CSS-first config via `@tailwindcss/postcss`), Recharts 3.8.1,
+  TypeScript 6.0.3. Verified with a real `next build`.
+
+- **Screenshot is a real capture of the running app** (`docs/screenshots/dashboard.png`),
+  taken headlessly via the system Edge against live seeded data — not a mockup.

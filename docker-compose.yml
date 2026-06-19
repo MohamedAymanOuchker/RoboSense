@@ -36,6 +36,7 @@ services:
       JWT_ALGORITHM: ${JWT_ALGORITHM:-HS256}
       ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-1440}
       ENVIRONMENT: ${ENVIRONMENT:-development}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
     ports:
       - "8000:8000"
     volumes:
@@ -48,6 +49,26 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: robosense-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    environment:
+      # URL the browser uses to reach the API (host-mapped backend port).
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+    ports:
+      - "3000:3000"
+    volumes:
+      # Mount source for hot-reload; keep node_modules/.next container-owned.
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/.next
+    command: npm run dev
 
 volumes:
   pgdata:

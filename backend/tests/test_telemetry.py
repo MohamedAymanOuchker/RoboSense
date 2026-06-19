@@ -7,14 +7,8 @@ from app.api.deps import get_rate_limiter
 from app.core.rate_limit import FixedWindowRateLimiter
 from app.main import app
 
-
-@pytest.fixture(autouse=True)
-def _permissive_rate_limiter():
-    """Isolate tests from the shared singleton limiter with a fresh, generous one."""
-    limiter = FixedWindowRateLimiter(max_requests=10_000, window_seconds=60)
-    app.dependency_overrides[get_rate_limiter] = lambda: limiter
-    yield
-    app.dependency_overrides.pop(get_rate_limiter, None)
+# A permissive limiter is applied to every test via an autouse fixture in
+# conftest.py; the rate-limit test below overrides it with a strict one.
 
 
 async def _new_device_key(auth_client: AsyncClient, name: str = "rover") -> str:

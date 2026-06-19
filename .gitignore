@@ -28,6 +28,9 @@ dist/
 # --- Temp / scratch ---
 *.tmp
 
+# --- Local agent/editor tooling ---
+.claude/
+
 # --- Editors / OS ---
 .vscode/
 .idea/

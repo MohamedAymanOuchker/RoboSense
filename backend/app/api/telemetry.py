@@ -21,6 +21,8 @@ from app.models.telemetry import Telemetry
 from app.models.user import User
 from app.schemas.telemetry import (
     IngestResult,
+    LatestSnapshot,
+    SensorSnapshot,
     TelemetryIngest,
     TelemetryPoint,
     TelemetryQueryResult,
@@ -191,3 +193,35 @@ async def query_telemetry(
         count=len(points),
         points=points,
     )
+
+
+@router.get(
+    "/latest",
+    response_model=LatestSnapshot,
+    summary="Latest reading per sensor for a device (JWT auth)",
+)
+async def latest_snapshot(
+    device_id: int,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> LatestSnapshot:
+    device = await session.scalar(
+        select(Device).where(Device.id == device_id, Device.user_id == current_user.id)
+    )
+    if device is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Device not found")
+
+    rows = (
+        await session.execute(
+            select(Telemetry.sensor_name, Telemetry.value, Telemetry.time)
+            .where(Telemetry.device_id == device_id)
+            .distinct(Telemetry.sensor_name)
+            .order_by(Telemetry.sensor_name, Telemetry.time.desc())
+        )
+    ).all()
+
+    readings = [
+        SensorSnapshot(sensor_name=row[0], value=float(row[1]), time=row[2]) for row in rows
+    ]
+    last_seen = max((r.time for r in readings), default=None)
+    return LatestSnapshot(device_id=device_id, last_seen=last_seen, readings=readings)
