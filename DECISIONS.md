@@ -180,3 +180,31 @@ Running log of non-obvious choices made while building RoboSense, per the
 
 - **Screenshot is a real capture of the running app** (`docs/screenshots/dashboard.png`),
   taken headlessly via the system Edge against live seeded data — not a mockup.
+
+## M6 — ROS 2 bridge + docs polish
+
+- **A real `ament_python` package, not a loose script.** `examples/ros2/telemetry_bridge`
+  has `package.xml`, `setup.py`, the resource marker, and a console entry point
+  (`ros2 run telemetry_bridge bridge`). A robotics reviewer recognizes this as the
+  idiomatic form, and it's `colcon build`-able.
+
+- **ROS topic rate is decoupled from ingest rate.** Subscriptions only store the
+  latest value per sensor; a timer (`publish_period`, default 2 s) POSTs the
+  accumulated snapshot. This keeps a 100 Hz topic from blowing through the
+  per-device rate limit, and is how you'd actually bridge ROS to a telemetry API.
+
+- **Standard-library HTTP, no `requests` dependency.** The node uses
+  `urllib.request`, so it runs against a fresh ROS 2 install with nothing to
+  `pip install` / `rosdep` first — consistent with the "works first try" goal.
+
+- **Bridges `sensor_msgs/BatteryState` + `std_msgs/Float64`.** One real robotics
+  message (battery %/voltage) and one generic numeric mapping cover the common
+  cases; extending is a one-callback change documented in the README.
+
+- **Verified without a ROS 2 install.** `py_compile` checks the node, and the
+  exact JSON snapshot it emits (`battery`, `voltage`, plus a mapped sensor) was
+  POSTed to the running backend — 201, stored correctly.
+
+- **OpenAPI polish.** Added tag descriptions, an MIT license + contact block, a
+  richer top-level description, and a worked example body on the ingest schema so
+  `/docs` is clean and self-explanatory.

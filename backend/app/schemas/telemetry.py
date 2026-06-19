@@ -15,7 +15,19 @@ class TelemetryIngest(BaseModel):
     and must be numeric.
     """
 
-    model_config = ConfigDict(extra="allow")
+    model_config = ConfigDict(
+        extra="allow",
+        json_schema_extra={
+            "examples": [
+                {
+                    "device_id": "robot001",
+                    "temperature": 24.5,
+                    "battery": 87,
+                    "speed": 0.72,
+                }
+            ]
+        },
+    )
 
     device_id: str | None = Field(
         default=None, description="Optional label; the device is identified by its API key."

@@ -6,12 +6,10 @@ RoboSense is an open-source telemetry layer for robots and embedded devices. A
 device POSTs sensor readings over HTTP; RoboSense stores them as time-series data
 in TimescaleDB and shows them on a clean live dashboard.
 
-> **Status:** under active construction. Milestones 1–5 are complete: foundation,
-> auth + device management, the telemetry engine (TimescaleDB hypertable, API-key
-> ingestion with rate limiting, and a `time_bucket` query API), the **ESP32
-> firmware** (real, flashable, with offline buffering + reconnect), and the
-> **dashboard** (live + historical charts and threshold alerts). The ROS2 example
-> is landing next — see the [Roadmap](#roadmap).
+> **Status:** the core is complete and runnable end to end — backend + TimescaleDB,
+> JWT auth & device management, telemetry ingest/query, the dashboard, a real
+> flashable **ESP32 firmware**, and a **ROS 2 bridge**. A small anomaly-flag
+> stretch item remains — see the [Roadmap](#roadmap).
 
 ![RoboSense dashboard](docs/screenshots/dashboard.png)
 
@@ -30,6 +28,14 @@ Next.js dashboard ◄──── live + historical charts, device pages, alerts
 
 A single FastAPI service backed by PostgreSQL + TimescaleDB. No microservices,
 no message queues — the right amount of architecture for the job.
+
+```
+backend/     FastAPI app (api/, models/, schemas/, core/, db/) + pytest suite
+frontend/    Next.js dashboard (App Router, TypeScript, Tailwind, Recharts)
+firmware/    ESP32 firmware (Arduino .ino + PlatformIO)
+examples/    ROS 2 rclpy telemetry bridge
+docs/        screenshots
+```
 
 ## Quickstart
 
@@ -72,14 +78,15 @@ curl -X POST http://localhost:8000/api/telemetry \
 
 `make` targets wrap Docker Compose:
 
-| Command       | What it does                                              |
-| ------------- | -------------------------------------------------------- |
-| `make up`     | Build and start the stack (db + backend) in the background |
-| `make down`   | Stop the stack (keeps the database volume)               |
-| `make logs`   | Follow logs from all services                            |
-| `make test`   | Run the backend test suite inside the container          |
-| `make lint`   | Run `ruff` lint inside the container                     |
-| `make clean`  | Stop the stack and delete the database volume            |
+| Command       | What it does                                                  |
+| ------------- | ------------------------------------------------------------ |
+| `make up`     | Build and start the stack (db + backend + frontend) in the background |
+| `make seed`   | Create a demo device + 24h of fake telemetry                 |
+| `make down`   | Stop the stack (keeps the database volume)                   |
+| `make logs`   | Follow logs from all services                               |
+| `make test`   | Run the backend test suite inside the container             |
+| `make lint`   | Run `ruff` lint inside the container                        |
+| `make clean`  | Stop the stack and delete the database volume               |
 
 **No `make` (e.g. on Windows)?** Run the underlying commands directly:
 
@@ -153,13 +160,27 @@ flaky networks robots actually use:
 It compiles cleanly via PlatformIO (`pio run`) or the Arduino IDE — see the
 [firmware README](firmware/esp32/README.md) for wiring and flashing.
 
+## ROS 2 bridge
+
+For robots already running ROS 2, [`examples/ros2/`](examples/ros2/README.md) is a
+`rclpy` package (`telemetry_bridge`) that subscribes to topics and forwards them
+to the ingest API. It batches the latest value per sensor and POSTs on a timer, so
+high-rate topics stay under the per-device rate limit. Bridges
+`sensor_msgs/BatteryState` and `std_msgs/Float64` out of the box, configurable via
+ROS 2 parameters.
+
+```bash
+ros2 run telemetry_bridge bridge --ros-args \
+  -p api_key:=rsk_your_device_api_key -p device_id:=ros2-robot
+```
+
 ## Tech stack
 
 - **Backend:** Python 3.13, FastAPI, Uvicorn, Pydantic v2, SQLAlchemy 2 (async), asyncpg
 - **Database:** PostgreSQL + TimescaleDB (telemetry stored as a hypertable)
 - **Frontend:** Next.js (App Router) + TypeScript + Tailwind + Recharts
-- **Firmware:** ESP32 (Arduino / PlatformIO) _(M4)_
-- **ROS2:** `rclpy` bridge node _(M6)_
+- **Firmware:** ESP32 (Arduino / PlatformIO)
+- **ROS 2:** `rclpy` bridge node (`sensor_msgs` / `std_msgs` → ingest API)
 - **Dev/CI:** Docker Compose, Makefile, pytest, ruff, GitHub Actions
 
 ## Running tests
@@ -177,7 +198,7 @@ cd backend && pip install -e ".[dev]" && pytest -q
 - [x] **M3** — Telemetry ingest + time-bucketed query API + seed script
 - [x] **M4** — ESP32 firmware example (WiFi, POST loop, reconnect handling)
 - [x] **M5** — Next.js dashboard: live + historical charts, threshold alerts
-- [ ] **M6** — ROS2 bridge example + OpenAPI / docs polish
+- [x] **M6** — ROS 2 bridge example + OpenAPI / docs polish
 - [ ] **M7** _(stretch)_ — anomaly flag (rolling z-score)
 
 ## How it compares

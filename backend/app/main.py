@@ -22,14 +22,37 @@ async def lifespan(app: FastAPI):
     yield
 
 
+_DESCRIPTION = """
+A focused, self-hostable telemetry backend for robots and embedded devices.
+
+**Two ways in:**
+
+* Devices **ingest** with a per-device API key (`X-API-Key` header) — see
+  `POST /api/telemetry`.
+* The dashboard user authenticates with a **JWT** (`Authorization: Bearer …`)
+  from `/api/auth/login` to manage devices, query telemetry, and configure alerts.
+
+Telemetry is stored in a TimescaleDB hypertable; queries support `time_bucket`
+downsampling.
+"""
+
+_TAGS_METADATA = [
+    {"name": "auth", "description": "Register, log in, and inspect the current user."},
+    {"name": "devices", "description": "Create, list, rename, delete devices and rotate API keys."},
+    {"name": "telemetry", "description": "Ingest readings (API key) and query them (JWT)."},
+    {"name": "alerts", "description": "Per-device threshold rules and their live status."},
+    {"name": "health", "description": "Liveness and database-readiness probes."},
+    {"name": "meta", "description": "Service metadata."},
+]
+
 app = FastAPI(
     title="RoboSense API",
-    description=(
-        "A focused, self-hostable telemetry backend for robots and embedded "
-        "devices. Devices POST sensor readings; the dashboard reads them back."
-    ),
+    description=_DESCRIPTION,
     version="0.1.0",
     lifespan=lifespan,
+    openapi_tags=_TAGS_METADATA,
+    license_info={"name": "MIT", "url": "https://opensource.org/license/mit"},
+    contact={"name": "RoboSense", "url": "https://github.com/MohamedAymanOuchker/RoboSense"},
 )
 
 app.add_middleware(
