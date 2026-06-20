@@ -62,3 +62,19 @@ export interface AlertStatus {
   latest_time: string | null;
   triggered: boolean;
 }
+
+export interface AnomalyPoint {
+  time: string;
+  value: number;
+  zscore: number;
+}
+
+export interface AnomalyResult {
+  device_id: number;
+  sensor_name: string;
+  window: number;
+  z_threshold: number;
+  evaluated: number;
+  anomaly_count: number;
+  anomalies: AnomalyPoint[];
+}

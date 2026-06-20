@@ -10,7 +10,16 @@ import { SensorChart, type SeriesPoint } from "@/components/SensorChart";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { formatRelative, formatValue, sensorMeta } from "@/lib/format";
-import type { AlertStatus, Device, DeviceWithKey, LatestSnapshot } from "@/lib/types";
+import type {
+  AlertStatus,
+  AnomalyPoint,
+  Device,
+  DeviceWithKey,
+  LatestSnapshot,
+} from "@/lib/types";
+
+// z-score threshold for the dashboard's anomaly markers (configurable on the API).
+const ANOMALY_Z = 5;
 
 const RANGES = {
   "1h": { label: "1h", ms: 3_600_000, bucket: "1m" },
@@ -40,6 +49,8 @@ export default function DeviceDetailPage({ params }: { params: Promise<{ id: str
   const [device, setDevice] = useState<Device | null>(null);
   const [latest, setLatest] = useState<LatestSnapshot | null>(null);
   const [series, setSeries] = useState<Record<string, SeriesPoint[]>>({});
+  const [anomalies, setAnomalies] = useState<Record<string, AnomalyPoint[]>>({});
+  const [domain, setDomain] = useState<[number, number] | undefined>(undefined);
   const [alerts, setAlerts] = useState<AlertStatus[]>([]);
   const [range, setRange] = useState<RangeKey>("6h");
   const [rotatedKey, setRotatedKey] = useState<DeviceWithKey | null>(null);
@@ -77,6 +88,30 @@ export default function DeviceDetailPage({ params }: { params: Promise<{ id: str
     setLatest(snap);
     setSeries(grouped);
     setAlerts(status);
+    setDomain([start.getTime(), end.getTime()]);
+
+    // Anomaly markers per sensor over the same range.
+    const names = [
+      ...new Set([...Object.keys(grouped), ...snap.readings.map((r) => r.sensor_name)]),
+    ];
+    const results = await Promise.all(
+      names.map((name) =>
+        api
+          .anomalies(token, {
+            deviceId,
+            sensorName: name,
+            start: start.toISOString(),
+            end: end.toISOString(),
+            z: ANOMALY_Z,
+          })
+          .catch(() => null),
+      ),
+    );
+    const anomalyMap: Record<string, AnomalyPoint[]> = {};
+    names.forEach((name, i) => {
+      if (results[i]) anomalyMap[name] = results[i]!.anomalies;
+    });
+    setAnomalies(anomalyMap);
   }, [token, deviceId, range]);
 
   useEffect(() => {
@@ -94,6 +129,7 @@ export default function DeviceDetailPage({ params }: { params: Promise<{ id: str
   }, [series, latest]);
 
   const triggered = alerts.filter((a) => a.triggered);
+  const totalAnomalies = Object.values(anomalies).reduce((sum, list) => sum + list.length, 0);
 
   async function rotateKey() {
     if (!token) return;
@@ -179,9 +215,26 @@ export default function DeviceDetailPage({ params }: { params: Promise<{ id: str
         </div>
       )}
 
+      <div className="flex items-center justify-between">
+        <h2 className="text-sm font-medium text-slate-300">Sensors</h2>
+        {totalAnomalies > 0 && (
+          <span className="text-xs text-slate-500">
+            <span className="text-rose-400">⚠ {totalAnomalies}</span> anomal
+            {totalAnomalies === 1 ? "y" : "ies"} in range — dashed red lines mark readings
+            beyond {ANOMALY_Z}σ (rolling z-score)
+          </span>
+        )}
+      </div>
+
       <div className="grid gap-4 lg:grid-cols-2">
         {sensorNames.map((name) => (
-          <SensorChart key={name} sensorName={name} points={series[name] ?? []} />
+          <SensorChart
+            key={name}
+            sensorName={name}
+            points={series[name] ?? []}
+            anomalies={anomalies[name] ?? []}
+            domain={domain}
+          />
         ))}
         {sensorNames.length === 0 && (
           <p className="text-sm text-slate-500">

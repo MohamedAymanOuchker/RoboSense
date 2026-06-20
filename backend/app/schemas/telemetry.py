@@ -70,3 +70,19 @@ class LatestSnapshot(BaseModel):
     device_id: int
     last_seen: datetime | None
     readings: list[SensorSnapshot]
+
+
+class AnomalyPoint(BaseModel):
+    time: datetime
+    value: float
+    zscore: float
+
+
+class AnomalyResult(BaseModel):
+    device_id: int
+    sensor_name: str
+    window: int
+    z_threshold: float
+    evaluated: int
+    anomaly_count: int
+    anomalies: list[AnomalyPoint]

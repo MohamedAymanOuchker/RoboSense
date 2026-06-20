@@ -6,10 +6,10 @@ RoboSense is an open-source telemetry layer for robots and embedded devices. A
 device POSTs sensor readings over HTTP; RoboSense stores them as time-series data
 in TimescaleDB and shows them on a clean live dashboard.
 
-> **Status:** the core is complete and runnable end to end — backend + TimescaleDB,
-> JWT auth & device management, telemetry ingest/query, the dashboard, a real
-> flashable **ESP32 firmware**, and a **ROS 2 bridge**. A small anomaly-flag
-> stretch item remains — see the [Roadmap](#roadmap).
+> **Status:** complete and runnable end to end — backend + TimescaleDB, JWT auth &
+> device management, telemetry ingest/query, the dashboard (live charts, threshold
+> alerts, and rolling-z-score anomaly detection), a real flashable **ESP32
+> firmware**, and a **ROS 2 bridge**. See the [Roadmap](#roadmap).
 
 ![RoboSense dashboard](docs/screenshots/dashboard.png)
 
@@ -115,6 +115,10 @@ available today:
 | `POST` | `/api/devices/{id}/regenerate-key` | JWT | Rotate a device's API key |
 | `POST` | `/api/telemetry` | API key | Ingest a reading (flat `sensor: value` JSON) |
 | `GET`  | `/api/telemetry` | JWT | Query telemetry, optionally downsampled |
+| `GET`  | `/api/telemetry/latest` | JWT | Latest reading per sensor (snapshot) |
+| `GET`  | `/api/telemetry/anomalies` | JWT | Rolling z-score anomaly detection |
+| `GET`/`POST`/`DELETE` | `/api/devices/{id}/alerts[...]` | JWT | Manage threshold alert rules |
+| `GET`  | `/api/devices/{id}/alerts/status` | JWT | Evaluate alert rules vs latest readings |
 
 Passwords are hashed with Argon2; device API keys are random tokens stored only
 as a SHA-256 hash and shown exactly once.
@@ -139,6 +143,9 @@ A Next.js dashboard (http://localhost:3000) for the device owner:
   `1h / 6h / 24h / 7d` range selector, polling every few seconds.
 - **Threshold alerts** — add per-sensor rules (e.g. `battery < 20`); a banner and
   badge light up when the latest reading crosses the threshold. In-app only.
+- **Anomaly detection** — a rolling z-score (computed in-database with a window
+  function) flags readings that deviate from their recent history; the charts mark
+  them with dashed red lines and a per-sensor count.
 - **Device management** — create devices (API key shown once), rotate keys, delete.
 
 Auth is JWT-based (register / login). See the screenshot at the top.
@@ -199,7 +206,7 @@ cd backend && pip install -e ".[dev]" && pytest -q
 - [x] **M4** — ESP32 firmware example (WiFi, POST loop, reconnect handling)
 - [x] **M5** — Next.js dashboard: live + historical charts, threshold alerts
 - [x] **M6** — ROS 2 bridge example + OpenAPI / docs polish
-- [ ] **M7** _(stretch)_ — anomaly flag (rolling z-score)
+- [x] **M7** _(stretch)_ — anomaly flag (rolling z-score)
 
 ## How it compares
 

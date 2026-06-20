@@ -36,10 +36,23 @@ STEP = timedelta(seconds=30)
 CHUNK = 5000
 
 
+# A few injected outliers (step index -> {sensor: value}) so the rolling z-score
+# anomaly detector has something obvious to flag. Battery is left alone so it
+# doesn't interfere with the threshold-alert demo.
+_INJECTED_ANOMALIES: dict[int, dict[str, float]] = {
+    360: {"temperature": 61.0},
+    960: {"speed": 4.8},
+    1560: {"humidity": 4.0},
+    2160: {"temperature": -6.0},
+    2600: {"speed": 5.2},
+}
+
+
 def _generate_rows(device_id: int) -> list[dict]:
     """A day of plausible rover telemetry: diurnal temperature, draining battery,
     noisy speed, and humidity. Battery dips below 20% near the end so the
-    threshold-alert feature has something to flag."""
+    threshold-alert feature has something to flag, and a handful of injected
+    outliers exercise the anomaly detector."""
     now = datetime.now(UTC)
     steps = int(HOURS * 3600 / STEP.total_seconds())
     start = now - HOURS * timedelta(hours=1)
@@ -54,6 +67,7 @@ def _generate_rows(device_id: int) -> list[dict]:
             "speed": max(0.0, 0.7 + 0.5 * math.sin(i / 60) + random.gauss(0, 0.1)),
             "humidity": 45 + 10 * math.sin(i / 200) + random.gauss(0, 0.5),
         }
+        sample.update(_INJECTED_ANOMALIES.get(i, {}))
         for sensor_name, value in sample.items():
             rows.append(
                 {

@@ -1,6 +1,7 @@
 import type {
   AlertRule,
   AlertStatus,
+  AnomalyResult,
   Comparator,
   Device,
   DeviceWithKey,
@@ -129,4 +130,18 @@ export const api = {
 
   alertStatus: (token: string, deviceId: number) =>
     request<AlertStatus[]>(`/api/devices/${deviceId}/alerts/status`, { token }),
+
+  anomalies: (
+    token: string,
+    params: { deviceId: number; sensorName: string; start?: string; end?: string; z?: number },
+  ) => {
+    const q = new URLSearchParams({
+      device_id: String(params.deviceId),
+      sensor_name: params.sensorName,
+    });
+    if (params.start) q.set("start", params.start);
+    if (params.end) q.set("end", params.end);
+    if (params.z) q.set("z", String(params.z));
+    return request<AnomalyResult>(`/api/telemetry/anomalies?${q.toString()}`, { token });
+  },
 };

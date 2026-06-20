@@ -208,3 +208,24 @@ Running log of non-obvious choices made while building RoboSense, per the
 - **OpenAPI polish.** Added tag descriptions, an MIT license + contact block, a
   richer top-level description, and a worked example body on the ingest schema so
   `/docs` is clean and self-explanatory.
+
+## M7 — Anomaly detection (stretch)
+
+- **Rolling z-score, computed in the database.** `GET /api/telemetry/anomalies`
+  uses a SQL window function (`avg`/`stddev_samp`/`count` over
+  `ROWS BETWEEN <window> PRECEDING AND 1 PRECEDING`) so each reading is judged
+  against its **own trailing history**, excluding itself. Points needing a full
+  window with non-zero spread are skipped; the rest are flagged when `|z| >= z`.
+  Doing the stats in Postgres (not Python) is both faster and a nicer signal.
+
+- **Flagged on the charts, not just listed.** The dashboard marks anomalies with
+  dashed vertical lines at their timestamps plus a per-sensor count, which sidesteps
+  the raw-vs-downsampled Y-axis problem (a raw spike's value would distort a chart
+  showing bucketed averages). The chart X-axis was switched to a numeric time scale
+  so markers align with the line regardless of bucketing.
+
+- **Seed injects a few outliers** so the detector has something obvious to flag in
+  the demo (battery is left untouched to preserve the threshold-alert story).
+
+- **Default `z = 5` in the UI** keeps the demo clean (isolates the injected
+  spikes); the threshold and window are query parameters on the API.

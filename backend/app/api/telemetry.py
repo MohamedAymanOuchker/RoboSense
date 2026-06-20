@@ -20,6 +20,8 @@ from app.models.device import Device
 from app.models.telemetry import Telemetry
 from app.models.user import User
 from app.schemas.telemetry import (
+    AnomalyPoint,
+    AnomalyResult,
     IngestResult,
     LatestSnapshot,
     SensorSnapshot,
@@ -225,3 +227,74 @@ async def latest_snapshot(
     ]
     last_seen = max((r.time for r in readings), default=None)
     return LatestSnapshot(device_id=device_id, last_seen=last_seen, readings=readings)
+
+
+@router.get(
+    "/anomalies",
+    response_model=AnomalyResult,
+    summary="Rolling z-score anomaly detection for a sensor (JWT auth)",
+)
+async def detect_anomalies(
+    device_id: int,
+    sensor_name: str,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+    start: datetime | None = Query(default=None, description="Inclusive lower bound"),
+    end: datetime | None = Query(default=None, description="Exclusive upper bound"),
+    window: int = Query(default=20, ge=2, le=500, description="Trailing window size"),
+    z: float = Query(default=3.0, gt=0, le=10, description="|z| threshold to flag"),
+    limit: int = Query(default=5000, ge=1, le=20000),
+) -> AnomalyResult:
+    """Flag readings whose value deviates from the preceding ``window`` readings by
+    at least ``z`` standard deviations. The rolling mean/std are computed in the
+    database with a window function over the **trailing** window (excluding the
+    point itself), so each reading is judged against its own recent history."""
+    device = await session.scalar(
+        select(Device).where(Device.id == device_id, Device.user_id == current_user.id)
+    )
+    if device is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Device not found")
+
+    order = Telemetry.time.asc()
+    frame = (-window, -1)  # ROWS BETWEEN <window> PRECEDING AND 1 PRECEDING
+    roll_mean = func.avg(Telemetry.value).over(order_by=order, rows=frame)
+    roll_std = func.stddev_samp(Telemetry.value).over(order_by=order, rows=frame)
+    roll_count = func.count(Telemetry.value).over(order_by=order, rows=frame)
+
+    conditions = [
+        Telemetry.device_id == device_id,
+        Telemetry.sensor_name == sensor_name,
+    ]
+    if start is not None:
+        conditions.append(Telemetry.time >= start)
+    if end is not None:
+        conditions.append(Telemetry.time < end)
+
+    stmt = (
+        select(Telemetry.time, Telemetry.value, roll_mean, roll_std, roll_count)
+        .where(and_(*conditions))
+        .order_by(order)
+        .limit(limit)
+    )
+    rows = (await session.execute(stmt)).all()
+
+    anomalies: list[AnomalyPoint] = []
+    evaluated = 0
+    for when, value, mean, std, count in rows:
+        # Need a full trailing window with non-zero spread to judge the point.
+        if count is None or count < window or std is None or std == 0:
+            continue
+        evaluated += 1
+        zscore = (float(value) - float(mean)) / float(std)
+        if abs(zscore) >= z:
+            anomalies.append(AnomalyPoint(time=when, value=float(value), zscore=round(zscore, 3)))
+
+    return AnomalyResult(
+        device_id=device_id,
+        sensor_name=sensor_name,
+        window=window,
+        z_threshold=z,
+        evaluated=evaluated,
+        anomaly_count=len(anomalies),
+        anomalies=anomalies,
+    )
