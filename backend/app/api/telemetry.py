@@ -14,6 +14,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_ingesting_device, get_rate_limiter
+from app.core.events import get_broker
 from app.core.rate_limit import FixedWindowRateLimiter
 from app.db.session import get_session
 from app.db.timescale import telemetry_summary
@@ -108,6 +109,9 @@ async def ingest(
     ]
     await session.execute(pg_insert(Telemetry).values(rows).on_conflict_do_nothing())
     await session.commit()
+
+    # Push the reading to any live dashboard streams for this device.
+    get_broker().publish(device.id, {"time": ts.isoformat(), "readings": readings})
 
     return IngestResult(
         status="accepted",

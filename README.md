@@ -120,6 +120,7 @@ available today:
 | `GET`  | `/api/telemetry/anomalies` | JWT | Rolling z-score anomaly detection |
 | `GET`/`POST`/`DELETE` | `/api/devices/{id}/alerts[...]` | JWT | Manage threshold alert rules |
 | `GET`  | `/api/devices/{id}/alerts/status` | JWT | Evaluate alert rules vs latest readings |
+| `GET`  | `/api/devices/{id}/stream` | JWT (`?token=`) | Live telemetry stream (SSE) |
 
 Passwords are hashed with Argon2; device API keys are random tokens stored only
 as a SHA-256 hash and shown exactly once.
@@ -140,8 +141,9 @@ downsample with TimescaleDB `time_bucket`.
 A Next.js dashboard (http://localhost:3000) for the device owner:
 
 - **Device list** — cards with each device's latest readings and a live alert badge.
-- **Per-device view** — current readings, live + historical charts (Recharts) with a
-  `1h / 6h / 24h / 7d` range selector, polling every few seconds.
+- **Per-device view** — current readings that update **live over Server-Sent Events**
+  (pushed the instant a device ingests, not polled), plus historical charts (Recharts)
+  with a `1h / 6h / 24h / 7d` range selector.
 - **Threshold alerts** — add per-sensor rules (e.g. `battery < 20`); a banner and
   badge light up when the latest reading crosses the threshold. In-app only.
 - **Anomaly detection** — a rolling z-score (computed in-database with a window

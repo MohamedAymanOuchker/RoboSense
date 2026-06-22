@@ -260,3 +260,32 @@ Running log of non-obvious choices made while building RoboSense, per the
   dependency on the hypertable complicates teardown. Tests that need it create it
   in-test (autocommit); conftest drops it (CASCADE, autocommit) before the
   per-test `drop_all` so it can never block schema teardown.
+
+## Extension, Tier 1B — Live streaming over SSE
+
+- **In-process pub/sub, not Redis.** A single FastAPI process owns ingestion and
+  the dashboard streams, so a small in-memory broker (`app/core/events.py`) is the
+  right tool (matches the no-queues non-goal). Ingestion publishes each reading to
+  a bounded per-connection `asyncio.Queue`; a slow consumer drops events rather
+  than ever blocking ingestion.
+
+- **SSE, not WebSockets.** The dashboard only needs server→client push; SSE is
+  simpler, auto-reconnects, and is proxy-friendly. `GET /api/devices/{id}/stream`
+  returns `text/event-stream` and emits a `reading` event per ingest, with `: ping`
+  heartbeats. Disconnect cleanup relies on Starlette cancelling the generator (the
+  `finally` unsubscribes) rather than polling `request.is_disconnected()`.
+
+- **Token via query parameter.** A browser `EventSource` can't set an
+  `Authorization` header, so the stream authenticates with `?token=<JWT>`. Fine for
+  a self-hosted dashboard; documented.
+
+- **SSE delivery is unit-tested by driving the generator directly.** httpx's
+  in-process ASGI transport buffers responses, so it can't read an open-ended
+  stream — the test calls the endpoint and iterates `response.body_iterator`,
+  publishing between reads. The ingest→broker fan-out is tested separately.
+
+- **Dashboard layers SSE over a light poll.** Live current-readings come from the
+  stream (instant, with a "live" indicator); alert status still polls (server-side
+  evaluation) but slower, and historical charts refetch on range change. So
+  per-value polling is replaced by push, while aggregates that must be recomputed
+  stay on a relaxed interval.

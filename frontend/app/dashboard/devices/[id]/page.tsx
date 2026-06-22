@@ -17,6 +17,7 @@ import type {
   DeviceWithKey,
   LatestSnapshot,
 } from "@/lib/types";
+import { useDeviceStream } from "@/lib/useDeviceStream";
 
 // z-score threshold for the dashboard's anomaly markers (configurable on the API).
 const ANOMALY_Z = 5;
@@ -139,6 +140,17 @@ export default function DeviceDetailPage({ params }: { params: Promise<{ id: str
     return orderSensors([...names]);
   }, [series, latest]);
 
+  const { reading: liveReading, connected: live } = useDeviceStream(deviceId);
+
+  // Current readings: the latest snapshot with any live-streamed reading on top.
+  const liveValues = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const r of latest?.readings ?? []) map.set(r.sensor_name, r.value);
+    if (liveReading) for (const [k, v] of Object.entries(liveReading.readings)) map.set(k, v);
+    return map;
+  }, [latest, liveReading]);
+  const mergedLastSeen = liveReading?.time ?? latest?.last_seen ?? null;
+
   const triggered = alerts.filter((a) => a.triggered);
   const totalAnomalies = Object.values(anomalies).reduce((sum, list) => sum + list.length, 0);
 
@@ -175,10 +187,14 @@ export default function DeviceDetailPage({ params }: { params: Promise<{ id: str
         <div className="mt-2 flex flex-wrap items-end justify-between gap-4">
           <div>
             <h1 className="text-2xl font-semibold tracking-tight">{device?.name ?? "…"}</h1>
-            <p className="text-sm text-slate-400">
-              {latest?.last_seen
-                ? `Last reading ${formatRelative(latest.last_seen)}`
-                : "No data yet"}
+            <p className="flex items-center gap-2 text-sm text-slate-400">
+              {mergedLastSeen ? `Last reading ${formatRelative(mergedLastSeen)}` : "No data yet"}
+              {live && (
+                <span className="inline-flex items-center gap-1 text-xs text-emerald-400">
+                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" />
+                  live
+                </span>
+              )}
             </p>
           </div>
           <div className="flex gap-1 rounded-lg border border-slate-800 p-1">
@@ -210,19 +226,16 @@ export default function DeviceDetailPage({ params }: { params: Promise<{ id: str
         </div>
       )}
 
-      {latest && latest.readings.length > 0 && (
+      {liveValues.size > 0 && (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-          {orderSensors(latest.readings.map((r) => r.sensor_name)).map((name) => {
-            const reading = latest.readings.find((r) => r.sensor_name === name)!;
-            return (
-              <div key={name} className="rounded-xl border border-slate-800 bg-slate-900/50 p-3">
-                <div className="text-xs text-slate-500">{sensorMeta(name).label}</div>
-                <div className="mt-1 text-lg font-semibold text-slate-100">
-                  {formatValue(name, reading.value)}
-                </div>
+          {orderSensors([...liveValues.keys()]).map((name) => (
+            <div key={name} className="rounded-xl border border-slate-800 bg-slate-900/50 p-3">
+              <div className="text-xs text-slate-500">{sensorMeta(name).label}</div>
+              <div className="mt-1 text-lg font-semibold text-slate-100">
+                {formatValue(name, liveValues.get(name)!)}
               </div>
-            );
-          })}
+            </div>
+          ))}
         </div>
       )}
 
