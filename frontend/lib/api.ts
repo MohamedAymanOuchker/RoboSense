@@ -111,6 +111,18 @@ export const api = {
   query: (token: string, params: QueryParams) =>
     request<TelemetryResult>(`/api/telemetry?${buildQuery(params)}`, { token }),
 
+  summary: (
+    token: string,
+    params: { deviceId: number; start?: string; end?: string; agg?: string; order?: "asc" | "desc" },
+  ) => {
+    const q = new URLSearchParams({ device_id: String(params.deviceId) });
+    if (params.start) q.set("start", params.start);
+    if (params.end) q.set("end", params.end);
+    if (params.agg) q.set("agg", params.agg);
+    if (params.order) q.set("order", params.order);
+    return request<TelemetryResult>(`/api/telemetry/summary?${q.toString()}`, { token });
+  },
+
   listAlerts: (token: string, deviceId: number) =>
     request<AlertRule[]>(`/api/devices/${deviceId}/alerts`, { token }),
 

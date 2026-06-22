@@ -31,6 +31,13 @@ class Settings(BaseSettings):
     # --- CORS (comma-separated origins allowed to call the API from a browser) ---
     cors_origins: str = "http://localhost:3000"
 
+    # --- TimescaleDB lifecycle (0 disables the policy) ---
+    # Compress raw telemetry chunks older than this many days.
+    compression_after_days: int = 7
+    # Drop raw telemetry older than this many days (rollups in the continuous
+    # aggregate are kept regardless).
+    retention_days: int = 90
+
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]

@@ -116,6 +116,7 @@ available today:
 | `POST` | `/api/telemetry` | API key | Ingest a reading (flat `sensor: value` JSON) |
 | `GET`  | `/api/telemetry` | JWT | Query telemetry, optionally downsampled |
 | `GET`  | `/api/telemetry/latest` | JWT | Latest reading per sensor (snapshot) |
+| `GET`  | `/api/telemetry/summary` | JWT | Hourly rollup from the continuous aggregate |
 | `GET`  | `/api/telemetry/anomalies` | JWT | Rolling z-score anomaly detection |
 | `GET`/`POST`/`DELETE` | `/api/devices/{id}/alerts[...]` | JWT | Manage threshold alert rules |
 | `GET`  | `/api/devices/{id}/alerts/status` | JWT | Evaluate alert rules vs latest readings |
@@ -184,7 +185,9 @@ ros2 run telemetry_bridge bridge --ros-args \
 ## Tech stack
 
 - **Backend:** Python 3.13, FastAPI, Uvicorn, Pydantic v2, SQLAlchemy 2 (async), asyncpg
-- **Database:** PostgreSQL + TimescaleDB (telemetry stored as a hypertable)
+- **Database:** PostgreSQL + TimescaleDB — telemetry is a hypertable with an hourly
+  **continuous aggregate** for fast historical queries, plus **compression** and
+  **retention** policies so storage stays bounded as data grows
 - **Frontend:** Next.js (App Router) + TypeScript + Tailwind + Recharts
 - **Firmware:** ESP32 (Arduino / PlatformIO)
 - **ROS 2:** `rclpy` bridge node (`sensor_msgs` / `std_msgs` → ingest API)

@@ -21,11 +21,13 @@ import type {
 // z-score threshold for the dashboard's anomaly markers (configurable on the API).
 const ANOMALY_Z = 5;
 
+// Short ranges query raw telemetry with on-the-fly time_bucket; long ranges
+// (24h/7d) read the pre-materialized hourly continuous aggregate.
 const RANGES = {
-  "1h": { label: "1h", ms: 3_600_000, bucket: "1m" },
-  "6h": { label: "6h", ms: 21_600_000, bucket: "5m" },
-  "24h": { label: "24h", ms: 86_400_000, bucket: "15m" },
-  "7d": { label: "7d", ms: 604_800_000, bucket: "1h" },
+  "1h": { label: "1h", ms: 3_600_000, bucket: "1m", summary: false },
+  "6h": { label: "6h", ms: 21_600_000, bucket: "5m", summary: false },
+  "24h": { label: "24h", ms: 86_400_000, bucket: "15m", summary: true },
+  "7d": { label: "7d", ms: 604_800_000, bucket: "1h", summary: true },
 } as const;
 
 type RangeKey = keyof typeof RANGES;
@@ -68,17 +70,26 @@ export default function DeviceDetailPage({ params }: { params: Promise<{ id: str
     if (!token) return;
     const end = new Date();
     const start = new Date(end.getTime() - RANGES[range].ms);
+    const telemetry = RANGES[range].summary
+      ? api.summary(token, {
+          deviceId,
+          agg: "avg",
+          order: "asc",
+          start: start.toISOString(),
+          end: end.toISOString(),
+        })
+      : api.query(token, {
+          deviceId,
+          bucket: RANGES[range].bucket,
+          agg: "avg",
+          order: "asc",
+          start: start.toISOString(),
+          end: end.toISOString(),
+          limit: 5000,
+        });
     const [snap, result, status] = await Promise.all([
       api.latest(token, deviceId),
-      api.query(token, {
-        deviceId,
-        bucket: RANGES[range].bucket,
-        agg: "avg",
-        order: "asc",
-        start: start.toISOString(),
-        end: end.toISOString(),
-        limit: 5000,
-      }),
+      telemetry,
       api.alertStatus(token, deviceId),
     ]);
     const grouped: Record<string, SeriesPoint[]> = {};

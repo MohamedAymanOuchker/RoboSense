@@ -229,3 +229,34 @@ Running log of non-obvious choices made while building RoboSense, per the
 
 - **Default `z = 5` in the UI** keeps the demo clean (isolates the injected
   spikes); the threshold and window are query parameters on the API.
+
+## Extension, Tier 1A — Continuous aggregate + compression + retention
+
+- **Hourly continuous aggregate (`telemetry_summary`).** Pre-materializes
+  avg/min/max/count per device+sensor per hour so long historical queries read a
+  small rollup instead of scanning raw rows. Created with
+  `materialized_only = false` so a query transparently combines the materialized
+  rollup with real-time aggregation of the most recent (not-yet-materialized)
+  data — results are always complete, even right after ingest.
+
+- **Applied at startup, outside a transaction, idempotently.** CAGG creation and
+  the policy procedures (`add_continuous_aggregate_policy`,
+  `add_compression_policy`, `add_retention_policy`) can't run inside a transaction
+  block, so `apply_policies()` runs them in autocommit. All use `IF NOT EXISTS` /
+  `if_not_exists => true`, and the call is best-effort in the lifespan (a failure
+  logs but doesn't stop the API).
+
+- **Compression after 7d, retention after 90d (both configurable, 0 = off).**
+  Old raw chunks compress; raw rows past retention are dropped while the rollup is
+  kept — so storage stays bounded but history stays queryable at hourly
+  resolution.
+
+- **Dashboard long ranges read the rollup.** 24h/7d charts call
+  `GET /api/telemetry/summary` (the continuous aggregate); 1h/6h still query raw
+  with on-the-fly `time_bucket` (the aggregate's hourly grain is too coarse for
+  short views).
+
+- **CAGG kept out of the per-test schema.** It would slow every test and its
+  dependency on the hypertable complicates teardown. Tests that need it create it
+  in-test (autocommit); conftest drops it (CASCADE, autocommit) before the
+  per-test `drop_all` so it can never block schema teardown.

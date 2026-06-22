@@ -58,15 +58,26 @@ async def _ensure_test_database() -> None:
         await admin_engine.dispose()
 
 
+async def _drop_continuous_aggregate() -> None:
+    """Drop the continuous aggregate if a test created one. It depends on the
+    telemetry hypertable, so it must go before ``drop_all`` (which drops that
+    table) — and it can't be dropped inside a transaction."""
+    async with test_engine.connect() as conn:
+        conn = await conn.execution_options(isolation_level="AUTOCOMMIT")
+        await conn.execute(text("DROP MATERIALIZED VIEW IF EXISTS telemetry_summary CASCADE"))
+
+
 @pytest_asyncio.fixture(autouse=True)
 async def _prepare_database() -> AsyncGenerator[None, None]:
     """Ensure the test database exists and give every test a clean schema."""
     await _ensure_test_database()
+    await _drop_continuous_aggregate()
     async with test_engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
         # Reuse the app's real schema-prep path (extension + tables + hypertable).
         await prepare_database(conn)
     yield
+    await _drop_continuous_aggregate()
     async with test_engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
 

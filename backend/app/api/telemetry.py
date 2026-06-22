@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_user, get_ingesting_device, get_rate_limiter
 from app.core.rate_limit import FixedWindowRateLimiter
 from app.db.session import get_session
+from app.db.timescale import telemetry_summary
 from app.models.device import Device
 from app.models.telemetry import Telemetry
 from app.models.user import User
@@ -297,4 +298,63 @@ async def detect_anomalies(
         evaluated=evaluated,
         anomaly_count=len(anomalies),
         anomalies=anomalies,
+    )
+
+
+@router.get(
+    "/summary",
+    response_model=TelemetryQueryResult,
+    summary="Hourly rollup served from the TimescaleDB continuous aggregate (JWT auth)",
+)
+async def query_summary(
+    device_id: int,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+    sensor_name: str | None = Query(default=None),
+    start: datetime | None = Query(default=None, description="Inclusive lower bound"),
+    end: datetime | None = Query(default=None, description="Exclusive upper bound"),
+    agg: str = Query(default="avg", description="avg | min | max"),
+    order: str = Query(default="asc", description="asc | desc by time"),
+    limit: int = Query(default=5000, ge=1, le=20000),
+) -> TelemetryQueryResult:
+    """Read pre-materialized **hourly** avg/min/max from the continuous aggregate.
+    Much cheaper than scanning raw rows for long historical ranges; the aggregate
+    is kept current via a refresh policy plus real-time aggregation of recent data."""
+    device = await session.scalar(
+        select(Device).where(Device.id == device_id, Device.user_id == current_user.id)
+    )
+    if device is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Device not found")
+    if agg not in ("avg", "min", "max"):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Invalid agg; choose one of: avg, min, max",
+        )
+
+    bucket_col = telemetry_summary.c.bucket
+    value_col = telemetry_summary.c[agg]
+    conditions = [telemetry_summary.c.device_id == device_id]
+    if sensor_name is not None:
+        conditions.append(telemetry_summary.c.sensor_name == sensor_name)
+    if start is not None:
+        conditions.append(bucket_col >= start)
+    if end is not None:
+        conditions.append(bucket_col < end)
+
+    time_order = bucket_col.desc() if order == "desc" else bucket_col.asc()
+    stmt = (
+        select(bucket_col, telemetry_summary.c.sensor_name, value_col)
+        .where(and_(*conditions))
+        .order_by(time_order, telemetry_summary.c.sensor_name)
+        .limit(limit)
+    )
+    rows = (await session.execute(stmt)).all()
+    points = [TelemetryPoint(time=row[0], sensor_name=row[1], value=float(row[2])) for row in rows]
+    return TelemetryQueryResult(
+        device_id=device_id,
+        sensor_name=sensor_name,
+        bucket="1h",
+        agg=agg,
+        count=len(points),
+        points=points,
     )

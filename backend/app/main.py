@@ -1,5 +1,6 @@
 """RoboSense FastAPI application entrypoint."""
 
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -12,6 +13,10 @@ from app.api.health import router as health_router
 from app.api.telemetry import router as telemetry_router
 from app.core.config import settings
 from app.db.init_db import init_models
+from app.db.session import engine
+from app.db.timescale import apply_policies
+
+logger = logging.getLogger("robosense")
 
 
 @asynccontextmanager
@@ -19,6 +24,12 @@ async def lifespan(app: FastAPI):
     # Create database tables on startup so the stack is usable after `make up`
     # with no separate migration step.
     await init_models()
+    # Continuous aggregate + compression/retention policies. Best-effort: a
+    # failure here (e.g. a transient DB hiccup) shouldn't stop the API serving.
+    try:
+        await apply_policies(engine)
+    except Exception:  # noqa: BLE001
+        logger.exception("Failed to apply TimescaleDB policies")
     yield
 
 
